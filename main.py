@@ -1,7 +1,52 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, ValidationError
 
 app = FastAPI(title="Math Operations API")
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_request, exc: RequestValidationError):
+    """
+    Handle validation errors for invalid input types.
+
+    Args:
+        _request: The incoming request (unused)
+        exc (RequestValidationError): The validation error exception
+
+    Returns:
+        JSONResponse: Error details with 422 status code
+    """
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Invalid input",
+            "details": exc.errors(),
+            "message": "Please provide valid numeric values for 'a' and 'b'"
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(_request, _exc: Exception):
+    """
+    Handle unexpected exceptions.
+
+    Args:
+        _request: The incoming request (unused)
+        _exc (Exception): The caught exception (unused)
+
+    Returns:
+        JSONResponse: Generic error message with 500 status code
+    """
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "message": "An unexpected error occurred while processing your request"
+        }
+    )
 
 
 class OperationRequest(BaseModel):
@@ -67,10 +112,10 @@ def divide(request: OperationRequest) -> OperationResponse:
         OperationResponse: The quotient of a / b along with operation type
 
     Raises:
-        ValueError: If b is zero (division by zero)
+        HTTPException: If b is zero (division by zero)
     """
     if request.b == 0:
-        raise ValueError("Cannot divide by zero")
+        raise HTTPException(status_code=400, detail="Cannot divide by zero")
     result: float = request.a / request.b
     return {"result": result, "operation": "division"}
 
