@@ -1,7 +1,10 @@
+import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ValidationError
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Math Operations API")
 
@@ -29,17 +32,22 @@ async def validation_exception_handler(_request, exc: RequestValidationError):
 
 
 @app.exception_handler(Exception)
-async def general_exception_handler(_request, _exc: Exception):
+async def general_exception_handler(request, exc: Exception):
     """
     Handle unexpected exceptions.
 
     Args:
-        _request: The incoming request (unused)
-        _exc (Exception): The caught exception (unused)
+        request: The incoming request
+        exc (Exception): The caught exception
 
     Returns:
         JSONResponse: Generic error message with 500 status code
     """
+    logger.exception(
+        "Unexpected error occurred while processing request: %s %s",
+        request.method,
+        request.url.path
+    )
     return JSONResponse(
         status_code=500,
         content={
