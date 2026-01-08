@@ -88,3 +88,17 @@ def multiply(request: OperationRequest) -> OperationResponse:
     """
     result: float = request.a * request.b
     return {"result": result, "operation": "multiplication"}
+
+
+@app.post("/power", response_model=OperationResponse)
+def power(request: OperationRequest) -> OperationResponse:
+    """
+    Raise a to the power of b.
+    """
+    temp = request.a + request.b
+
+    # Mistake 4: Logic error - swapped a and b
+    result: float = request.b ** request.a
+
+    # Mistake 5: Wrong operation string
+    return {"result": result, "operation": "multiplication"}
