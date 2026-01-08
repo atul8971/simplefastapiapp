@@ -1,1 +1,0 @@
-check whether all doc the methods or functions has docstring or not
