@@ -33,7 +33,66 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            Perform a comprehensive code review with the following focus areas:
+            ═══════════════════════════════════════════════════════════════════════════════
+            ⚠️  CRITICAL: DECISION TABLE IS MANDATORY - MUST BE FIRST COMMENT ON PR
+            ═══════════════════════════════════════════════════════════════════════════════
+
+            Before doing ANYTHING else, you MUST:
+            1. Review the PR changes
+            2. Evaluate all criteria below
+            3. Post the DECISION TABLE as the FIRST PR comment using: gh pr comment ${{ github.event.pull_request.number }} --body "..."
+
+            **THE DECISION TABLE MUST BE POSTED BEFORE ANY OTHER COMMENTS OR INLINE REVIEWS.**
+
+            ---
+
+            ## DECISION TABLE FORMAT (REQUIRED - POST THIS FIRST)
+
+            **Decision Rules:**
+            - 🟢 APPROVE MERGE: 0 critical issues AND 0 high issues
+            - 🔴 REQUEST CHANGES: Any critical OR high issues found
+
+            Post this EXACT markdown structure as your FIRST comment:
+
+            ## 🔍 PR Review Decision
+
+            | Decision | |
+            |----------|---------|
+            | **Status** | 🟢 **APPROVE MERGE** _or_ 🔴 **REQUEST CHANGES** |
+
+            ---
+
+            ### Criteria Met
+
+            | Criterion | Status | Details |
+            |-----------|--------|---------|
+            | **Critical Issues** | ✅ PASS / ❌ FAIL | X critical issues |
+            | **High Issues** | ✅ PASS / ❌ FAIL | X high issues |
+            | **Medium Issues** | ✅ PASS / ⚠️ WARN | X medium issues - non-blocking |
+            | **Security (OWASP)** | ✅ PASS / ❌ FAIL | Summary of security checks |
+            | **Architecture (SOLID)** | ✅ PASS / ❌ FAIL | Design pattern assessment |
+            | **Test Coverage** | ✅ PASS / ❌ FAIL | Test coverage assessment |
+            | **Type Safety** | ✅ PASS / ❌ FAIL | Type validation status |
+
+            ---
+
+            ### Summary
+            Brief summary of the review findings and any blocking issues.
+
+            ---
+
+            **Status Logic:**
+            - Critical Issues: PASS if 0, FAIL if > 0
+            - High Issues: PASS if 0, FAIL if > 0
+            - Medium Issues: PASS if 0, WARN if > 0 (non-blocking)
+            - Security (OWASP): PASS if no OWASP Top 10 vulnerabilities found
+            - Architecture (SOLID): PASS if code follows SOLID principles
+            - Test Coverage: PASS if adequate tests exist for changes
+            - Type Safety: PASS if proper type hints/validation (Pydantic for Python, TypeScript types, etc.)
+
+            ═══════════════════════════════════════════════════════════════════════════════
+            AFTER posting the decision table, perform detailed review with these focus areas:
+            ═══════════════════════════════════════════════════════════════════════════════
 
             1. **Code Quality**
                - Clean code principles and best practices
@@ -62,55 +121,6 @@ jobs:
 
             Provide detailed feedback using inline comments for specific issues.
             Use top-level comments for general observations or praise.
-
-            ---
-
-            ## DECISION TABLE OUTPUT (REQUIRED)
-
-            After completing the review, you MUST generate a decision summary table in the following format.
-            Post this as a separate PR comment using `gh pr comment`.
-
-            **Decision Rules:**
-            - APPROVE MERGE: 0 critical issues AND 0 high issues
-            - REQUEST CHANGES: Any critical OR high issues found
-
-            **Table Format (use exactly this markdown structure):**
-
-            ```
-            ## 🔍 PR Review Decision
-
-            | Decision | |
-            |----------|---------|
-            | **Status** | 🟢 **APPROVE MERGE** / 🔴 **REQUEST CHANGES** |
-
-            ---
-
-            ### Criteria Met
-
-            | Criterion | Status | Details |
-            |-----------|--------|---------|
-            | **Critical Issues** | ✅ PASS / ❌ FAIL | X critical issues |
-            | **High Issues** | ✅ PASS / ❌ FAIL | X high issues |
-            | **Medium Issues** | ✅ PASS / ⚠️ WARN | X medium issues - non-blocking |
-            | **Security (OWASP)** | ✅ PASS / ❌ FAIL | Summary of security checks |
-            | **Architecture (SOLID)** | ✅ PASS / ❌ FAIL | Design pattern assessment |
-            | **Test Coverage** | ✅ PASS / ❌ FAIL | Test coverage assessment |
-            | **Type Safety** | ✅ PASS / ❌ FAIL | Type validation status |
-
-            ---
-
-            ### Summary
-            Brief summary of the review findings and any blocking issues.
-            ```
-
-            **Status Logic:**
-            - Critical Issues: PASS if 0, FAIL if > 0
-            - High Issues: PASS if 0, FAIL if > 0
-            - Medium Issues: PASS if 0, WARN if > 0 (non-blocking)
-            - Security (OWASP): PASS if no OWASP Top 10 vulnerabilities found
-            - Architecture (SOLID): PASS if code follows SOLID principles
-            - Test Coverage: PASS if adequate tests exist for changes
-            - Type Safety: PASS if proper type hints/validation (Pydantic for Python, TypeScript types, etc.)
 
           # Tools for comprehensive PR review
           claude_args: |
