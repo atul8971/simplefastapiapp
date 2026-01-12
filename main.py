@@ -30,7 +30,7 @@ def read_root():
     Returns:
         dict: A welcome message
     """
-    return {"message": "Welcome to Math Operations API"}
+    return {"message": "Welcome to Math Operations API "}
 
 
 @app.post("/add", response_model=OperationResponse)
