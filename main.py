@@ -1,16 +1,22 @@
 import os
 import re
-import hashlib
-import secrets
 from typing import Optional
 from contextlib import contextmanager
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field, field_validator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import sqlite3
+import bcrypt
 
+# Rate limiter setup
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Math Operations API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Security: Use environment variables for secrets (never hardcode)
 DB_PASSWORD = os.environ.get("DB_PASSWORD")
@@ -55,18 +61,20 @@ def init_db():
 
 
 def hash_password(password: str) -> str:
-    """Hash password using SHA-256 with salt."""
-    salt = secrets.token_hex(16)
-    password_hash = hashlib.sha256((salt + password).encode()).hexdigest()
-    return f"{salt}:{password_hash}"
+    """Hash password using bcrypt (industry-standard secure hashing)."""
+    # bcrypt automatically handles salting and uses adaptive hashing
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt(rounds=12)  # Work factor of 12 is recommended
+    return bcrypt.hashpw(password_bytes, salt).decode('utf-8')
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    """Verify password against stored hash."""
+    """Verify password against stored bcrypt hash."""
     try:
-        salt, hash_value = stored_hash.split(":")
-        return hashlib.sha256((salt + password).encode()).hexdigest() == hash_value
-    except ValueError:
+        password_bytes = password.encode('utf-8')
+        stored_hash_bytes = stored_hash.encode('utf-8')
+        return bcrypt.checkpw(password_bytes, stored_hash_bytes)
+    except (ValueError, TypeError):
         return False
 
 
@@ -158,10 +166,11 @@ class SearchRequest(BaseModel):
 
 
 class DeleteRequest(BaseModel):
-    """Delete request with proper typing."""
+    """Delete request with proper typing and authorization."""
 
     user_id: int = Field(..., gt=0)
     force: bool = False
+    admin_token: str = Field(..., description="Admin token required for user deletion")
 
 
 # ============ MATH OPERATIONS API ============
@@ -247,11 +256,13 @@ def multiply(request: OperationRequest) -> OperationResponse:
 
 
 @app.post("/users/create", response_model=UserResponse)
-def create_user(user_data: UserRequest) -> UserResponse:
+@limiter.limit("5/minute")  # Rate limit: 5 requests per minute per IP
+def create_user(request: Request, user_data: UserRequest) -> UserResponse:
     """
     Create a new user with proper validation and security.
 
     Args:
+        request: FastAPI request object (required for rate limiting)
         user_data: Validated user data from Pydantic model
 
     Returns:
@@ -336,15 +347,22 @@ def delete_user(
     _token: str = Depends(verify_token),
 ) -> dict:
     """
-    Delete a user (requires authentication and authorization).
+    Delete a user (requires authentication and admin authorization).
 
     Args:
-        request: Delete request with user_id
+        request: Delete request with user_id and admin_token
         _token: Bearer token from authentication
 
     Returns:
         dict: Deletion status
     """
+    # Authorization check: verify admin token before allowing deletion
+    if not verify_admin_token(request.admin_token):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin authorization required to delete users"
+        )
+
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
