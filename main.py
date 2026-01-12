@@ -1,15 +1,99 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-import sqlite3
 import os
-import subprocess
+import re
+import hashlib
+import secrets
+from typing import Optional
+from contextlib import contextmanager
+
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, EmailStr, Field, field_validator
+import sqlite3
 
 app = FastAPI(title="Math Operations API")
 
-# Hardcoded credentials - Security Issue
-DB_PASSWORD = "admin123"
-API_SECRET_KEY = "sk-12345-very-secret-key-do-not-share"
-ADMIN_TOKEN = "super_secret_admin_token_2024"
+# Security: Use environment variables for secrets (never hardcode)
+DB_PASSWORD = os.environ.get("DB_PASSWORD")
+API_SECRET_KEY = os.environ.get("API_SECRET_KEY")
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
+
+# Security scheme for bearer token authentication
+security = HTTPBearer()
+
+
+# ============ DATABASE UTILITIES ============
+
+
+@contextmanager
+def get_db_connection():
+    """Context manager for database connections - ensures proper cleanup."""
+    conn = sqlite3.connect("users.db")
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def init_db():
+    """Initialize database with proper schema."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+
+# ============ SECURITY UTILITIES ============
+
+
+def hash_password(password: str) -> str:
+    """Hash password using SHA-256 with salt."""
+    salt = secrets.token_hex(16)
+    password_hash = hashlib.sha256((salt + password).encode()).hexdigest()
+    return f"{salt}:{password_hash}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verify password against stored hash."""
+    try:
+        salt, hash_value = stored_hash.split(":")
+        return hashlib.sha256((salt + password).encode()).hexdigest() == hash_value
+    except ValueError:
+        return False
+
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    """Verify bearer token for authentication."""
+    if not ADMIN_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server configuration error: ADMIN_TOKEN not set",
+        )
+    if credentials.credentials != ADMIN_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return credentials.credentials
+
+
+def verify_admin_token(admin_token: Optional[str]) -> bool:
+    """Verify admin token for authorization."""
+    if not ADMIN_TOKEN:
+        return False
+    return admin_token == ADMIN_TOKEN
+
+
+# ============ PYDANTIC MODELS ============
 
 
 class OperationRequest(BaseModel):
@@ -22,8 +106,69 @@ class OperationResponse(BaseModel):
     operation: str
 
 
+class UserRequest(BaseModel):
+    """User creation request with proper validation."""
+
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if not re.match(r"^[a-zA-Z0-9_]+$", v):
+            raise ValueError("Username must contain only alphanumeric characters and underscores")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one digit")
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
+            raise ValueError("Password must contain at least one special character")
+        return v
+
+
+class UserResponse(BaseModel):
+    """User response model - never expose sensitive data."""
+
+    id: Optional[int] = None
+    username: str
+    email: str
+    status: str
+
+
+class SearchRequest(BaseModel):
+    """Search request with validation."""
+
+    query: str = Field(..., min_length=1, max_length=100)
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, v: str) -> str:
+        # Prevent path traversal and command injection
+        if any(char in v for char in [";", "|", "&", "`", "$", "(", ")", "{", "}", "<", ">", "\n", "\r"]):
+            raise ValueError("Query contains invalid characters")
+        return v
+
+
+class DeleteRequest(BaseModel):
+    """Delete request with proper typing."""
+
+    user_id: int = Field(..., gt=0)
+    force: bool = False
+
+
+# ============ MATH OPERATIONS API ============
+
+
 @app.get("/")
-def read_root():
+def read_root() -> dict:
     """
     Welcome endpoint for the Math Operations API.
 
@@ -34,7 +179,7 @@ def read_root():
 
 
 @app.post("/add", response_model=OperationResponse)
-def add(request: OperationRequest):
+def add(request: OperationRequest) -> OperationResponse:
     """
     Perform addition of two numbers.
 
@@ -45,7 +190,7 @@ def add(request: OperationRequest):
         OperationResponse: The sum of a and b along with operation type
     """
     result = request.a + request.b
-    return {"result": result, "operation": "addition"}
+    return OperationResponse(result=result, operation="addition")
 
 
 @app.post("/subtract", response_model=OperationResponse)
@@ -60,7 +205,7 @@ def subtract(request: OperationRequest) -> OperationResponse:
         OperationResponse: The difference of a - b along with operation type
     """
     result: float = request.a - request.b
-    return {"result": result, "operation": "subtraction"}
+    return OperationResponse(result=result, operation="subtraction")
 
 
 @app.post("/divide", response_model=OperationResponse)
@@ -75,12 +220,12 @@ def divide(request: OperationRequest) -> OperationResponse:
         OperationResponse: The quotient of a / b along with operation type
 
     Raises:
-        ValueError: If b is zero (division by zero)
+        HTTPException: If b is zero (division by zero)
     """
     if request.b == 0:
-        raise ValueError("Cannot divide by zero")
+        raise HTTPException(status_code=400, detail="Cannot divide by zero")
     result: float = request.a / request.b
-    return {"result": result, "operation": "division"}
+    return OperationResponse(result=result, operation="division")
 
 
 @app.post("/multiply", response_model=OperationResponse)
@@ -95,113 +240,145 @@ def multiply(request: OperationRequest) -> OperationResponse:
         OperationResponse: The product of a * b along with operation type
     """
     result: float = request.a * request.b
-    return {"result": result, "operation": "multiplication"}
+    return OperationResponse(result=result, operation="multiplication")
 
 
-# ============ NEW USER MANAGEMENT API (WITH INTENTIONAL ISSUES) ============
-
-# Missing proper Pydantic model - using dict instead
-class UserRequest(BaseModel):
-    username: str
-    email: str
-    password: str  # No password validation
+# ============ USER MANAGEMENT API (SECURED) ============
 
 
-@app.post("/users/create")
-def create_user(user_data: dict):  # Not using Pydantic model - Type safety issue
-    """Create a new user"""
-    # SQL Injection vulnerability - string concatenation
-    username = user_data.get("username")
-    email = user_data.get("email")
-    password = user_data.get("password")  # Storing plain text password
+@app.post("/users/create", response_model=UserResponse)
+def create_user(user_data: UserRequest) -> UserResponse:
+    """
+    Create a new user with proper validation and security.
 
-    # SQL Injection - OWASP A03
-    query = f"INSERT INTO users (username, email, password) VALUES ('{username}', '{email}', '{password}')"
+    Args:
+        user_data: Validated user data from Pydantic model
+
+    Returns:
+        UserResponse: Created user info (without sensitive data)
+    """
+    # Hash the password before storage
+    password_hash = hash_password(user_data.password)
 
     try:
-        conn = sqlite3.connect("users.db")
-        cursor = conn.cursor()
-        cursor.execute(query)  # Vulnerable to SQL injection
-        conn.commit()
-        conn.close()
-    except:  # Bare except - bad practice
-        pass  # Silently swallowing errors
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Use parameterized query to prevent SQL injection
+            cursor.execute(
+                "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
+                (user_data.username, user_data.email, password_hash),
+            )
+            conn.commit()
+            user_id = cursor.lastrowid
 
-    # Duplicate validation logic - DRY violation
-    if username is None:
-        return {"error": "Username required"}
-    if email is None:
-        return {"error": "Email required"}
-    if password is None:
-        return {"error": "Password required"}
+        return UserResponse(
+            id=user_id,
+            username=user_data.username,
+            email=user_data.email,
+            status="created",
+        )
 
-    return {"status": "created", "user": username, "debug_password": password}  # Leaking password
+    except sqlite3.IntegrityError as e:
+        if "username" in str(e).lower():
+            raise HTTPException(status_code=400, detail="Username already exists")
+        elif "email" in str(e).lower():
+            raise HTTPException(status_code=400, detail="Email already exists")
+        raise HTTPException(status_code=400, detail="User creation failed")
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.get("/users/search")
-def search_users(query: str, admin_token: str = None):  # Missing type hints for return
-    # No authentication check - anyone can search
-    # Command injection vulnerability - OWASP A03
-    cmd = f"grep -r '{query}' /var/log/users/"
-    result = subprocess.run(cmd, shell=True, capture_output=True)  # Command injection
+def search_users(
+    query: str,
+    admin_token: Optional[str] = None,
+    _token: str = Depends(verify_token),
+) -> dict:
+    """
+    Search users by username (requires authentication).
 
-    # SSRF potential - no URL validation
-    if query.startswith("http"):
-        import requests
-        response = requests.get(query)  # SSRF vulnerability - OWASP A10
-        return {"external_data": response.text}
+    Args:
+        query: Search query string
+        admin_token: Optional admin token for elevated access
+        _token: Bearer token from authentication
 
-    # Duplicate code - same pattern as create_user
-    if query is None:
-        return {"error": "Query required"}
+    Returns:
+        dict: Search results
+    """
+    # Validate query to prevent injection attacks
+    if not query or len(query) > 100:
+        raise HTTPException(status_code=400, detail="Invalid query length")
 
-    # Inefficient loop - N+1 query pattern simulation
-    users = []
-    user_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    for user_id in user_ids:
-        # Simulating N+1 query - bad performance
-        conn = sqlite3.connect("users.db")
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")  # N+1 queries
-        user = cursor.fetchone()
-        if user:
-            users.append(user)
-        conn.close()
+    # Sanitize query - only allow alphanumeric and basic characters
+    if not re.match(r"^[a-zA-Z0-9_@.\-\s]+$", query):
+        raise HTTPException(status_code=400, detail="Query contains invalid characters")
 
-    return {"results": users, "query": query}
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Use parameterized query with LIKE for safe searching
+            cursor.execute(
+                "SELECT id, username, email FROM users WHERE username LIKE ? OR email LIKE ? LIMIT 50",
+                (f"%{query}%", f"%{query}%"),
+            )
+            rows = cursor.fetchall()
+            users = [{"id": row["id"], "username": row["username"], "email": row["email"]} for row in rows]
+
+        return {"results": users, "count": len(users)}
+
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.post("/users/delete")
-def delete_user(user_id, force=False):  # Missing type annotations
-    # No authorization check - anyone can delete
-    # No input validation on user_id
+def delete_user(
+    request: DeleteRequest,
+    _token: str = Depends(verify_token),
+) -> dict:
+    """
+    Delete a user (requires authentication and authorization).
 
-    # SQL Injection again - DRY violation (same pattern repeated)
-    query = f"DELETE FROM users WHERE id = {user_id}"
+    Args:
+        request: Delete request with user_id
+        _token: Bearer token from authentication
 
-    conn = sqlite3.connect("users.db")
-    cursor = conn.cursor()
-    cursor.execute(query)  # SQL injection
-    conn.commit()
-    conn.close()
+    Returns:
+        dict: Deletion status
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
 
-    # Duplicate error handling pattern
-    if user_id is None:
-        return {"error": "User ID required"}
+            # First check if user exists
+            cursor.execute("SELECT id FROM users WHERE id = ?", (request.user_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="User not found")
 
-    return {"status": "deleted", "user_id": user_id}
+            # Use parameterized query for safe deletion
+            cursor.execute("DELETE FROM users WHERE id = ?", (request.user_id,))
+            conn.commit()
+
+        return {"status": "deleted", "user_id": request.user_id}
+
+    except HTTPException:
+        raise
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.get("/admin/config")
-def get_admin_config():
-    # Return only non-sensitive configuration
-    return {
-        "app_name": "Math Operations API",
-        "version": "1.0.0"
-    }
+def get_admin_config(_token: str = Depends(verify_token)) -> dict:
+    """
+    Return non-sensitive configuration (requires authentication).
+
+    Returns:
+        dict: Safe application configuration
+    """
+    return {"app_name": "Math Operations API", "version": "1.0.0"}
 
 
-@app.post("/execute")
-def execute_command(cmd: str):
-    # Endpoint disabled for security reasons
-    return {"error": "This endpoint has been disabled for security reasons"}
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on application startup."""
+    init_db()
