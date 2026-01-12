@@ -34,35 +34,32 @@ jobs:
             PR NUMBER: ${{ github.event.pull_request.number }}
 
             ═══════════════════════════════════════════════════════════════════════════════
-            ⚠️  CRITICAL: SINGLE DECISION TABLE - CREATE OR UPDATE EXISTING
+            ⚠️  CRITICAL: UPDATE PROGRESS TRACKING COMMENT WITH DECISION TABLE
             ═══════════════════════════════════════════════════════════════════════════════
 
-            **IMPORTANT: Only ONE decision table should exist per PR. Follow these steps:**
+            **IMPORTANT: Add the decision table to the EXISTING progress tracking comment (the one with the progress image). Do NOT create a separate comment.**
 
-            **Step 1: Check for existing decision table comment**
-            Run: gh pr view ${{ github.event.pull_request.number }} --json comments --jq '.comments[] | select(.body | contains("<!-- DECISION-TABLE-MARKER -->")) | .url'
+            **Step 1: Find the progress tracking comment**
+            Run: gh pr view ${{ github.event.pull_request.number }} --json comments --jq '.comments[] | select(.body | contains("<!-- Claude Code Tracking Comment")) | {id: .url | split("/") | last, body: .body}'
 
-            **Step 2: Create OR Update the decision table**
-            - If a comment URL was found (contains the marker):
-              Extract the comment ID from URL (last number) and UPDATE it:
-              gh api repos/${{ github.repository }}/issues/comments/{COMMENT_ID} -X PATCH -f body="YOUR_TABLE_CONTENT"
-            - If NO existing comment found:
-              CREATE new comment:
-              gh pr comment ${{ github.event.pull_request.number }} --body "YOUR_TABLE_CONTENT"
+            **Step 2: Update the progress tracking comment by APPENDING the decision table**
+            - Extract the comment ID from the result
+            - Get the current body content (which includes the progress image)
+            - Append your decision table BELOW the existing content
+            - Update using: gh api repos/${{ github.repository }}/issues/comments/{COMMENT_ID} -X PATCH -f body="EXISTING_CONTENT + YOUR_TABLE"
 
             **Step 3: Review the PR changes and evaluate all criteria**
 
             ---
 
-            ## DECISION TABLE FORMAT (MUST INCLUDE MARKER)
+            ## DECISION TABLE FORMAT (APPEND TO TRACKING COMMENT)
 
             **Decision Rules:**
             - 🟢 APPROVE MERGE: 0 critical AND 0 high issues
             - 🟡 MERGE WITH CAUTION: 0 critical, 0 high, has medium/low
             - 🔴 DO NOT MERGE: Any critical OR high issues found
 
-            **CRITICAL: Always include the hidden marker at the TOP of your decision table:**
-            <!-- DECISION-TABLE-MARKER -->
+            **Add a separator and then the decision table below the progress image:**
 
             ## 🔍 PR Review Decision
 
