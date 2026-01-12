@@ -49,8 +49,9 @@ jobs:
             ## DECISION TABLE FORMAT (REQUIRED - POST THIS FIRST)
 
             **Decision Rules:**
-            - 🟢 APPROVE MERGE: 0 critical issues AND 0 high issues
-            - 🔴 REQUEST CHANGES: Any critical OR high issues found
+            - 🟢 APPROVE MERGE: 0 critical AND 0 high issues
+            - 🟡 MERGE WITH CAUTION: 0 critical, 0 high, has medium/low
+            - 🔴 DO NOT MERGE: Any critical OR high issues found
 
             Post this EXACT markdown structure as your FIRST comment:
 
@@ -58,7 +59,7 @@ jobs:
 
             | Decision | |
             |----------|---------|
-            | **Status** | 🟢 **APPROVE MERGE** _or_ 🔴 **REQUEST CHANGES** |
+            | **Status** | 🟢 **APPROVE MERGE** / 🟡 **MERGE WITH CAUTION** / 🔴 **DO NOT MERGE** |
 
             ---
 
@@ -66,13 +67,15 @@ jobs:
 
             | Criterion | Status | Details |
             |-----------|--------|---------|
-            | **Critical Issues** | ✅ PASS / ❌ FAIL | X critical issues |
-            | **High Issues** | ✅ PASS / ❌ FAIL | X high issues |
-            | **Medium Issues** | ✅ PASS / ⚠️ WARN | X medium issues - non-blocking |
-            | **Security (OWASP)** | ✅ PASS / ❌ FAIL | Summary of security checks |
-            | **Architecture (SOLID)** | ✅ PASS / ❌ FAIL | Design pattern assessment |
-            | **Test Coverage** | ✅ PASS / ❌ FAIL | Test coverage assessment |
-            | **Type Safety** | ✅ PASS / ❌ FAIL | Type validation status |
+            | 🔴 **Critical Issues** | ✅ PASS / ❌ FAIL | X critical issues |
+            | 🟠 **High Issues** | ✅ PASS / ❌ FAIL | X high issues |
+            | 🟡 **Medium Issues** | ✅ PASS / ⚠️ WARN | X medium issues - non-blocking |
+            | 🔒 **OWASP Top 10** | ✅ PASS / ❌ FAIL | A01-A10 compliance |
+            | 📐 **SOLID Principles** | ✅ PASS / ❌ FAIL | SRP, OCP, LSP, ISP, DIP |
+            | 🔁 **Code Reuse (DRY)** | ✅ PASS / ❌ FAIL | Duplication check |
+            | 🧪 **Test Coverage** | ✅ PASS / ❌ FAIL | Coverage assessment |
+            | 📝 **Type Safety** | ✅ PASS / ❌ FAIL | Type hints/Pydantic |
+            | ⚡ **Performance** | ✅ PASS / ❌ FAIL | N+1 queries, bottlenecks |
 
             ---
 
@@ -82,45 +85,35 @@ jobs:
             ---
 
             **Status Logic:**
-            - Critical Issues: PASS if 0, FAIL if > 0
-            - High Issues: PASS if 0, FAIL if > 0
+            - Critical/High Issues: PASS if 0, FAIL if > 0
             - Medium Issues: PASS if 0, WARN if > 0 (non-blocking)
-            - Security (OWASP): PASS if no OWASP Top 10 vulnerabilities found
-            - Architecture (SOLID): PASS if code follows SOLID principles
-            - Test Coverage: PASS if adequate tests exist for changes
-            - Type Safety: PASS if proper type hints/validation (Pydantic for Python, TypeScript types, etc.)
+            - OWASP Top 10: A01-Broken Access, A02-Crypto, A03-Injection, A04-Insecure Design, A05-Misconfig, A06-Vulnerable Components, A07-Auth Failures, A08-Integrity, A09-Logging, A10-SSRF
+            - SOLID: SRP, OCP, LSP, ISP, DIP compliance
+            - DRY: No duplicate code, reuse existing utilities
+            - Performance: No N+1 queries, proper caching, async patterns
 
             ═══════════════════════════════════════════════════════════════════════════════
-            AFTER posting the decision table, perform detailed review with these focus areas:
+            AFTER posting the decision table, perform 3-LOOP REVIEW:
             ═══════════════════════════════════════════════════════════════════════════════
 
-            1. **Code Quality**
-               - Clean code principles and best practices
-               - Proper error handling and edge cases
-               - Code readability and maintainability
+            **Loop 1 - Security & Architecture:**
+            - OWASP Top 10 (SQL injection, XSS, auth bypass, SSRF)
+            - SOLID principles violations
+            - Authorization checks on endpoints
+            - Hardcoded secrets, crypto failures
 
-            2. **Security**
-               - Check for potential security vulnerabilities
-               - Validate input sanitization
-               - Review authentication/authorization logic
+            **Loop 2 - Implementation:**
+            - Clean code, error handling, input validation
+            - Code reuse (DRY), design patterns
+            - Async/await patterns, proper exception handling
 
-            3. **Performance**
-               - Identify potential performance bottlenecks
-               - Review database queries for efficiency
-               - Check for memory leaks or resource issues
+            **Loop 3 - Polish:**
+            - Performance (N+1 queries, caching, indexing)
+            - Test coverage, edge cases
+            - Type hints, Pydantic validation
+            - Documentation completeness
 
-            4. **Testing**
-               - Verify adequate test coverage
-               - Review test quality and edge cases
-               - Check for missing test scenarios
-
-            5. **Documentation**
-               - Ensure code is properly documented
-               - Verify README updates for new features
-               - Check API documentation accuracy
-
-            Provide detailed feedback using inline comments for specific issues.
-            Use top-level comments for general observations or praise.
+            Provide inline comments for specific issues. Decision table is MANDATORY for every review.
 
           # Tools for comprehensive PR review
           claude_args: |
