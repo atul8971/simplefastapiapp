@@ -194,17 +194,14 @@ def delete_user(user_id, force=False):  # Missing type annotations
 
 @app.get("/admin/config")
 def get_admin_config():
-    # Exposing sensitive configuration - Security issue
+    # Return only non-sensitive configuration
     return {
-        "db_password": DB_PASSWORD,
-        "api_key": API_SECRET_KEY,
-        "admin_token": ADMIN_TOKEN,
-        "env_vars": dict(os.environ)  # Leaking all environment variables
+        "app_name": "Math Operations API",
+        "version": "1.0.0"
     }
 
 
 @app.post("/execute")
 def execute_command(cmd: str):
-    # Remote code execution - Critical security vulnerability
-    result = os.popen(cmd).read()  # RCE vulnerability
-    return {"output": result}
+    # Endpoint disabled for security reasons
+    return {"error": "This endpoint has been disabled for security reasons"}
