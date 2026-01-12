@@ -37,16 +37,20 @@ jobs:
             ⚠️  CRITICAL: UPDATE PROGRESS TRACKING COMMENT WITH DECISION TABLE
             ═══════════════════════════════════════════════════════════════════════════════
 
-            **IMPORTANT: Add the decision table to the EXISTING progress tracking comment (the one with the progress image). Do NOT create a separate comment.**
+            **IMPORTANT: Maintain a SINGLE PR Review Decision comment across all runs. Do NOT create duplicate comments.**
 
-            **Step 1: Find the progress tracking comment**
-            Run: gh pr view ${{ github.event.pull_request.number }} --json comments --jq '.comments[] | select(.body | contains("<!-- Claude Code Tracking Comment")) | {id: .url | split("/") | last, body: .body}'
+            **Step 1: Check if a PR Review Decision comment already exists**
+            Run: gh pr view ${{ github.event.pull_request.number }} --json comments --jq '.comments[] | select(.body | contains("<!-- PR-REVIEW-DECISION-MARKER -->")) | {id: .url | split("/") | last}'
 
-            **Step 2: Update the progress tracking comment by APPENDING the decision table**
-            - Extract the comment ID from the result
-            - Get the current body content (which includes the progress image)
-            - Append your decision table BELOW the existing content
-            - Update using: gh api repos/${{ github.repository }}/issues/comments/{COMMENT_ID} -X PATCH -f body="EXISTING_CONTENT + YOUR_TABLE"
+            **Step 2: Update or Create the decision comment**
+            - If decision comment EXISTS (Step 1 returns a comment ID):
+              - GET the existing comment body to extract the Run History table
+              - PRESERVE existing run history rows and ADD a new row for this run
+              - Update ALL criteria with fresh review results
+              - Use: gh api repos/${{ github.repository }}/issues/comments/{COMMENT_ID} -X PATCH -f body="UPDATED_CONTENT"
+            - If NO decision comment exists:
+              - Find the progress tracking comment: gh pr view ${{ github.event.pull_request.number }} --json comments --jq '.comments[] | select(.body | contains("<!-- Claude Code Tracking Comment")) | {id: .url | split("/") | last, body: .body}'
+              - APPEND the decision table to the progress tracking comment
 
             **Step 3: Review the PR changes and evaluate all criteria**
 
@@ -61,7 +65,9 @@ jobs:
 
             **Add a separator and then the decision table below the progress image:**
 
+            <!-- PR-REVIEW-DECISION-MARKER -->
             ## 🔍 PR Review Decision
+            *Last updated: [timestamp] | Run: ${{ github.run_number }}*
 
             | Decision | |
             |----------|---------|
@@ -87,6 +93,15 @@ jobs:
 
             ### Summary
             Brief summary of the review findings and any blocking issues.
+
+            ---
+
+            ### Run History
+            | Run | Commit | Status | Time |
+            |-----|--------|--------|------|
+            | #${{ github.run_number }} | ${{ github.event.pull_request.head.sha }} | 🟢/🟡/🔴 | [current time] |
+
+            *Previous runs are preserved above when updating this comment.*
 
             ---
 
