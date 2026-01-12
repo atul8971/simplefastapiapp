@@ -34,26 +34,35 @@ jobs:
             PR NUMBER: ${{ github.event.pull_request.number }}
 
             ═══════════════════════════════════════════════════════════════════════════════
-            ⚠️  CRITICAL: DECISION TABLE IS MANDATORY - MUST BE FIRST COMMENT ON PR
+            ⚠️  CRITICAL: SINGLE DECISION TABLE - CREATE OR UPDATE EXISTING
             ═══════════════════════════════════════════════════════════════════════════════
 
-            Before doing ANYTHING else, you MUST:
-            1. Review the PR changes
-            2. Evaluate all criteria below
-            3. Post the DECISION TABLE as the FIRST PR comment using: gh pr comment ${{ github.event.pull_request.number }} --body "..."
+            **IMPORTANT: Only ONE decision table should exist per PR. Follow these steps:**
 
-            **THE DECISION TABLE MUST BE POSTED BEFORE ANY OTHER COMMENTS OR INLINE REVIEWS.**
+            **Step 1: Check for existing decision table comment**
+            Run: gh pr view ${{ github.event.pull_request.number }} --json comments --jq '.comments[] | select(.body | contains("<!-- DECISION-TABLE-MARKER -->")) | .url'
+
+            **Step 2: Create OR Update the decision table**
+            - If a comment URL was found (contains the marker):
+              Extract the comment ID from URL (last number) and UPDATE it:
+              gh api repos/${{ github.repository }}/issues/comments/{COMMENT_ID} -X PATCH -f body="YOUR_TABLE_CONTENT"
+            - If NO existing comment found:
+              CREATE new comment:
+              gh pr comment ${{ github.event.pull_request.number }} --body "YOUR_TABLE_CONTENT"
+
+            **Step 3: Review the PR changes and evaluate all criteria**
 
             ---
 
-            ## DECISION TABLE FORMAT (REQUIRED - POST THIS FIRST)
+            ## DECISION TABLE FORMAT (MUST INCLUDE MARKER)
 
             **Decision Rules:**
             - 🟢 APPROVE MERGE: 0 critical AND 0 high issues
             - 🟡 MERGE WITH CAUTION: 0 critical, 0 high, has medium/low
             - 🔴 DO NOT MERGE: Any critical OR high issues found
 
-            Post this EXACT markdown structure as your FIRST comment:
+            **CRITICAL: Always include the hidden marker at the TOP of your decision table:**
+            <!-- DECISION-TABLE-MARKER -->
 
             ## 🔍 PR Review Decision
 
@@ -117,7 +126,7 @@ jobs:
 
           # Tools for comprehensive PR review
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*)"
 
 # When track_progress is enabled:
 # - Creates a tracking comment with progress checkboxes
